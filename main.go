@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 )
@@ -15,15 +14,22 @@ func main() {
 	const filepathRoot = "."
 	const port = "8080"
 
-	cfg := &apiConfig{} 
+	cfg := &apiConfig{
+		fileserverHits: 0,
+	} 
+	
 	mux := http.NewServeMux()
 
-	fileServer := http.StripPrefix("/app/", http.FileServer(http.Dir(filepathRoot)))
-	mux.Handle("/app/", cfg.middlewareMetrics(fileServer))
+	fileServer := http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot)))
+	mux.Handle("/app/*", cfg.middlewareMetrics(fileServer))
+	mux.HandleFunc("GET /admin/metrics", cfg.metricsHandler)
 
-	mux.HandleFunc("/healthz", readinessHandler)
-	mux.HandleFunc("/metrics", cfg.metricsHandler)
-	mux.HandleFunc("/reset", cfg.resetHandler)
+	mux.HandleFunc("GET /api/healthz", readinessHandler)
+	mux.HandleFunc("GET /api/metrics", cfg.metricsHandler)
+
+	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
+
+	mux.HandleFunc("/api/reset", cfg.resetHandler)
 
 	corsMux := middlewareCors(mux)
 
@@ -34,20 +40,4 @@ func main() {
 
     log.Printf("Starting server on port: %s\n", port)
     log.Fatal(server.ListenAndServe())
-}
-
-func (cfg *apiConfig) middlewareMetrics(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cfg.totalRequests++
-		if r.URL.Path == "/app/" {
-			cfg.fileserverHits++
-		}
-
-		next.ServeHTTP(w,r)
-	})
-}
-
-func (cfg *apiConfig) metricsHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-    fmt.Fprintf(w, "Hits: %d\n", cfg.totalRequests)
 }
