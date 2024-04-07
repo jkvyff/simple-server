@@ -3,19 +3,28 @@ package main
 import (
 	"log"
 	"net/http"
+
+	"github.com/jkvyff/simple-server/internal/database"
 )
 
 type apiConfig struct {
 	fileserverHits int
-	totalRequests  int 
+	totalRequests  int
+	DB *database.DB
 }
 
 func main() {
 	const filepathRoot = "."
 	const port = "8080"
 
+	db, err := database.NewDB("database.json")
+	if err != nil {
+		log.Fatal(err)
+	}  
+
 	cfg := &apiConfig{
 		fileserverHits: 0,
+		DB: db,
 	} 
 	
 	mux := http.NewServeMux()
@@ -27,7 +36,9 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", readinessHandler)
 	mux.HandleFunc("GET /api/metrics", cfg.metricsHandler)
 
-	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
+	mux.HandleFunc("POST /api/chirps", cfg.handlerChirpsCreate)
+	mux.HandleFunc("GET /api/chirps", cfg.handlerChirpsRetrieve)
+	mux.HandleFunc("GET /api/chirps/{chirpId}", cfg.handlerChirpsRetrieveByID)
 
 	mux.HandleFunc("/api/reset", cfg.resetHandler)
 
