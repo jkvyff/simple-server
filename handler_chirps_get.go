@@ -6,20 +6,24 @@ import (
 	"strconv"
 )
 
-func (cfg *apiConfig) handlerChirpsRetrieveByID(w http.ResponseWriter, r *http.Request) {
-	path := r.PathValue("chirpId")
-	intPath, err := strconv.Atoi(path)
+func (cfg *apiConfig) handlerChirpsGet(w http.ResponseWriter, r *http.Request) {
+	chirpIDString := r.PathValue("chirpID")
+	chirpID, err := strconv.Atoi(chirpIDString)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "couldn't find Id")
-		return
-	}
-	dbChirp, err := cfg.DB.GetChirpByID(intPath)
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "Chirp Id could not be found")
+		respondWithError(w, http.StatusBadRequest, "Invalid chirp ID")
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, dbChirp)
+	dbChirp, err := cfg.DB.GetChirp(chirpID)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "Couldn't get chirp")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, Chirp{
+		ID:   dbChirp.ID,
+		Body: dbChirp.Body,
+	})
 }
 
 func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Request) {
@@ -32,8 +36,8 @@ func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Reque
 	chirps := []Chirp{}
 	for _, dbChirp := range dbChirps {
 		chirps = append(chirps, Chirp{
-			Body: dbChirp.Body,
 			ID:   dbChirp.ID,
+			Body: dbChirp.Body,
 		})
 	}
 

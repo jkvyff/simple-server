@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 
@@ -9,8 +10,7 @@ import (
 
 type apiConfig struct {
 	fileserverHits int
-	totalRequests  int
-	DB *database.DB
+	DB             *database.DB
 }
 
 func main() {
@@ -20,41 +20,46 @@ func main() {
 	db, err := database.NewDB("database.json")
 	if err != nil {
 		log.Fatal(err)
-	}  
+	}
 
-	cfg := &apiConfig{
+	dbg := flag.Bool("debug", false, "Enable debug mode")
+	flag.Parse()
+	if dbg != nil && *dbg {
+		err := db.ResetDB()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	apiCfg := apiConfig{
 		fileserverHits: 0,
-		DB: db,
-	} 
-	
-	mux := http.NewServeMux()
+		DB:             db,
+	}
 
-	fileServer := http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot)))
-	mux.Handle("/app/*", cfg.middlewareMetrics(fileServer))
-	mux.HandleFunc("GET /admin/metrics", cfg.metricsHandler)
+	mux := http.NewServeMux()
+	fsHandler := apiCfg.middlewareMetrics(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))
+	mux.Handle("/app/*", fsHandler)
 
 	mux.HandleFunc("GET /api/healthz", readinessHandler)
-	mux.HandleFunc("GET /api/metrics", cfg.metricsHandler)
+	mux.HandleFunc("GET /api/reset", apiCfg.resetHandler)
 
-	mux.HandleFunc("POST /api/login", cfg.handlerUsersLogin)
+	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
 
-	mux.HandleFunc("POST /api/users", cfg.handlerUsersCreate)
-	mux.HandleFunc("GET /api/users", cfg.handlerUsersRetrieve)
-	mux.HandleFunc("GET /api/users/{userId}", cfg.handlerUsersRetrieveByID)
+	mux.HandleFunc("POST /api/users", apiCfg.handlerUsersCreate)
 
-	mux.HandleFunc("POST /api/chirps", cfg.handlerChirpsCreate)
-	mux.HandleFunc("GET /api/chirps", cfg.handlerChirpsRetrieve)
-	mux.HandleFunc("GET /api/chirps/{chirpId}", cfg.handlerChirpsRetrieveByID)
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerChirpsCreate)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerChirpsRetrieve)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerChirpsGet)
 
-	mux.HandleFunc("/api/reset", cfg.resetHandler)
+	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
 
 	corsMux := middlewareCors(mux)
 
-    server := &http.Server{
-        Addr:    ":" + port,
-        Handler: corsMux, 
-    }
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: corsMux,
+	}
 
-    log.Printf("Starting server on port: %s\n", port)
-    log.Fatal(server.ListenAndServe())
+	log.Printf("Serving files from %s on port: %s\n", filepathRoot, port)
+	log.Fatal(srv.ListenAndServe())
 }

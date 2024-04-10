@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http"
-	"sort"
 	"strconv"
 )
 
@@ -20,26 +19,4 @@ func (cfg *apiConfig) handlerUsersRetrieveByID(w http.ResponseWriter, r *http.Re
 	}
 
 	respondWithJSON(w, http.StatusOK, dbUser)
-}
-
-func (cfg *apiConfig) handlerUsersRetrieve(w http.ResponseWriter, r *http.Request) {
-	dbUsers, err := cfg.DB.GetUsers()
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve users")
-		return
-	}
-
-	users := []User{}
-	for _, dbUser := range dbUsers {
-		users = append(users, User{
-			Email: dbUser.Email,
-			ID:   dbUser.ID,
-		})
-	}
-
-	sort.Slice(users, func(i, j int) bool {
-		return users[i].ID < users[j].ID
-	})
-
-	respondWithJSON(w, http.StatusOK, users)
 }
