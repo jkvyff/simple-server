@@ -24,3 +24,5 @@ go.work
 simple-server
 
 *.http
+
+.env
