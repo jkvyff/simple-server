@@ -12,6 +12,7 @@ func (cfg *apiConfig) handlerUsersUpdate(w http.ResponseWriter, r *http.Request)
 	type parameters struct {
 		Password string `json:"password"`
 		Email    string `json:"email"`
+		IsChirpyRed bool `json:"is_chirpy_red"`
 	}
 	type response struct {
 		User
@@ -50,7 +51,7 @@ func (cfg *apiConfig) handlerUsersUpdate(w http.ResponseWriter, r *http.Request)
 
 	user, err := cfg.DB.UpdateUser(userIDInt, params.Email, hashedPassword)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't create user")
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update user")
 		return
 	}
 
@@ -58,6 +59,7 @@ func (cfg *apiConfig) handlerUsersUpdate(w http.ResponseWriter, r *http.Request)
 		User: User{
 			ID:    user.ID,
 			Email: user.Email,
+			IsChirpyRed: user.IsChirpyRed,
 		},
 	})
 }
