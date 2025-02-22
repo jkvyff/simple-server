@@ -3,16 +3,15 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/jkvyff/simple-server/internal/auth"
+	"github.com/jkvyff/simple-server/internal/database"
 )
 
 func (cfg *apiConfig) handlerUsersUpdate(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Password string `json:"password"`
 		Email    string `json:"email"`
-		IsChirpyRed bool `json:"is_chirpy_red"`
 	}
 	type response struct {
 		User
@@ -20,12 +19,12 @@ func (cfg *apiConfig) handlerUsersUpdate(w http.ResponseWriter, r *http.Request)
 
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Couldn't find JWT")
+		respondWithError(w, http.StatusUnauthorized, "Couldn't find JWT", err)
 		return
 	}
-	subject, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	userID, err := auth.ValidateJWT(token, cfg.jwtSecret)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Couldn't validate JWT")
+		respondWithError(w, http.StatusUnauthorized, "Couldn't validate JWT", err)
 		return
 	}
 
@@ -33,33 +32,32 @@ func (cfg *apiConfig) handlerUsersUpdate(w http.ResponseWriter, r *http.Request)
 	params := parameters{}
 	err = decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters")
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
 		return
 	}
 
 	hashedPassword, err := auth.HashPassword(params.Password)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't hash password")
+		respondWithError(w, http.StatusInternalServerError, "Couldn't hash password", err)
 		return
 	}
 
-	userIDInt, err := strconv.Atoi(subject)
+	user, err := cfg.db.UpdateUser(r.Context(), database.UpdateUserParams{
+		ID:             userID,
+		Email:          params.Email,
+		HashedPassword: hashedPassword,
+	})
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't parse user ID")
-		return
-	}
-
-	user, err := cfg.DB.UpdateUser(userIDInt, params.Email, hashedPassword)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't update user")
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update user", err)
 		return
 	}
 
 	respondWithJSON(w, http.StatusOK, response{
 		User: User{
-			ID:    user.ID,
-			Email: user.Email,
-			IsChirpyRed: user.IsChirpyRed,
+			ID:        user.ID,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+			Email:     user.Email,
 		},
 	})
 }

@@ -13,16 +13,16 @@ func (cfg *apiConfig) handlerMetrics(w http.ResponseWriter, r *http.Request) {
 
 <body>
 	<h1>Welcome, Chirpy Admin</h1>
-	<p>Chirpy has been visited %dtimes!</p>
+	<p>Chirpy has been visited %d times!</p>
 </body>
 
 </html>
-	`, cfg.fileserverHits)))
+	`, cfg.fileserverHits.Load())))
 }
 
 func (cfg *apiConfig) middlewareMetrics(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cfg.fileserverHits++
+		cfg.fileserverHits.Add(1)
 		next.ServeHTTP(w, r)
 	})
 }

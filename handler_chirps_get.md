@@ -34,17 +34,41 @@ func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	authorID := -1
+	authorIDString := r.URL.Query().Get("author_id")
+	if authorIDString != "" {
+		authorID, err = strconv.Atoi(authorIDString)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid author ID")
+			return
+		}
+	}
+
 	chirps := []Chirp{}
 	for _, dbChirp := range dbChirps {
+		if authorID != -1 && dbChirp.AuthorID != authorID {
+			continue
+		}
+
 		chirps = append(chirps, Chirp{
-			ID:   dbChirp.ID,
+			ID:       dbChirp.ID,
 			AuthorID: dbChirp.AuthorID,
-			Body: dbChirp.Body,
+			Body:     dbChirp.Body,
 		})
 	}
 
+	sortDir := "asc"
+	sortString := r.URL.Query().Get("sort")
+	if sortString == "desc" {
+		sortDir = "desc"
+	}
+
 	sort.Slice(chirps, func(i, j int) bool {
-		return chirps[i].ID < chirps[j].ID
+		if sortDir == "asc" {
+			return chirps[i].ID < chirps[j].ID
+		} else {
+			return chirps[i].ID > chirps[j].ID
+		}
 	})
 
 	respondWithJSON(w, http.StatusOK, chirps)

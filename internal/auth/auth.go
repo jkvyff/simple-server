@@ -1,14 +1,16 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -17,12 +19,10 @@ type TokenType string
 const (
 	// TokenTypeAccess -
 	TokenTypeAccess TokenType = "chirpy-access"
-	// TokenTypeRefresh -
-	TokenTypeRefresh TokenType = "chirpy-refresh"
 )
 
 // ErrNoAuthHeaderIncluded -
-var ErrNoAuthHeaderIncluded = errors.New("not auth header included in request")
+var ErrNoAuthHeaderIncluded = errors.New("no auth header included in request")
 
 // HashPassword -
 func HashPassword(password string) (string, error) {
@@ -38,24 +38,24 @@ func CheckPasswordHash(password, hash string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 }
 
+// MakeJWT -
 func MakeJWT(
-	userID int,
+	userID uuid.UUID,
 	tokenSecret string,
 	expiresIn time.Duration,
-	tokenType TokenType,
 ) (string, error) {
 	signingKey := []byte(tokenSecret)
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-		Issuer:    string(tokenType),
+		Issuer:    string(TokenTypeAccess),
 		IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
 		ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(expiresIn)),
-		Subject:   fmt.Sprintf("%d", userID),
+		Subject:   userID.String(),
 	})
 	return token.SignedString(signingKey)
 }
 
-func RefreshToken(tokenString, tokenSecret string) (string, error) {
+// ValidateJWT -
+func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	claimsStruct := jwt.RegisteredClaims{}
 	token, err := jwt.ParseWithClaims(
 		tokenString,
@@ -63,67 +63,30 @@ func RefreshToken(tokenString, tokenSecret string) (string, error) {
 		func(token *jwt.Token) (interface{}, error) { return []byte(tokenSecret), nil },
 	)
 	if err != nil {
-		return "", err
+		return uuid.Nil, err
 	}
 
 	userIDString, err := token.Claims.GetSubject()
 	if err != nil {
-		return "", err
+		return uuid.Nil, err
 	}
 
 	issuer, err := token.Claims.GetIssuer()
 	if err != nil {
-		return "", err
-	}
-	if issuer != string(TokenTypeRefresh) {
-		return "", errors.New("invalid issuer")
-	}
-
-	userID, err := strconv.Atoi(userIDString)
-	if err != nil {
-		return "", err
-	}
-
-	newToken, err := MakeJWT(
-		userID,
-		tokenSecret,
-		time.Hour,
-		TokenTypeAccess,
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return newToken, nil
-}
-
-func ValidateJWT(tokenString, tokenSecret string) (string, error) {
-	claimsStruct := jwt.RegisteredClaims{}
-	token, err := jwt.ParseWithClaims(
-		tokenString,
-		&claimsStruct,
-		func(token *jwt.Token) (interface{}, error) { return []byte(tokenSecret), nil },
-	)
-	if err != nil {
-		return "", err
-	}
-
-	userIDString, err := token.Claims.GetSubject()
-	if err != nil {
-		return "", err
-	}
-
-	issuer, err := token.Claims.GetIssuer()
-	if err != nil {
-		return "", err
+		return uuid.Nil, err
 	}
 	if issuer != string(TokenTypeAccess) {
-		return "", errors.New("invalid issuer")
+		return uuid.Nil, errors.New("invalid issuer")
 	}
 
-	return userIDString, nil
+	id, err := uuid.Parse(userIDString)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+	return id, nil
 }
 
+// GetBearerToken -
 func GetBearerToken(headers http.Header) (string, error) {
 	authHeader := headers.Get("Authorization")
 	if authHeader == "" {
@@ -137,15 +100,13 @@ func GetBearerToken(headers http.Header) (string, error) {
 	return splitAuth[1], nil
 }
 
-func GetApiKey(headers http.Header) (string, error) {
-	authHeader := headers.Get("Authorization")
-	if authHeader == "" {
-		return "", ErrNoAuthHeaderIncluded
+// MakeRefreshToken makes a random 256 bit token
+// encoded in hex
+func MakeRefreshToken() (string, error) {
+	token := make([]byte, 32)
+	_, err := rand.Read(token)
+	if err != nil {
+		return "", err
 	}
-	splitAuth := strings.Split(authHeader, " ")
-	if len(splitAuth) < 2 || splitAuth[0] != "ApiKey" {
-		return "", errors.New("malformed authorization ApiKey header")
-	}
-
-	return splitAuth[1], nil
+	return hex.EncodeToString(token), nil
 }
